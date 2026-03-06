@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: self-hosted
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version and build number
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          BUILD_NUMBER="$(git rev-list --count HEAD)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "dmg_name=Hex-v${VERSION}.dmg" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Swift packages
+        run: xcodebuild -resolvePackageDependencies -project Hex.xcodeproj -scheme Hex
+
+      - name: Archive
+        run: |
+          xcodebuild archive \
+            -project Hex.xcodeproj \
+            -scheme Hex \
+            -configuration Release \
+            -archivePath build/Hex.xcarchive \
+            -destination "generic/platform=macOS,variant=Mac" \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ steps.version.outputs.build_number }}"
+
+      - name: Export archive
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath build/Hex.xcarchive \
+            -exportPath build/export \
+            -exportOptionsPlist ExportOptions.plist
+
+      - name: Notarize app
+        env:
+          RUNNER_ROOT_PWD: ${{ secrets.RUNNER_ROOT_PWD }}
+        run: |
+          security unlock-keychain -p "$RUNNER_ROOT_PWD" /Users/felix/Library/Keychains/login.keychain-db
+          ditto -c -k --keepParent build/export/Hex.app build/Hex-notarize.zip
+          xcrun notarytool submit build/Hex-notarize.zip \
+            --keychain-profile "notarytool" \
+            --keychain /Users/felix/Library/Keychains/login.keychain-db \
+            --wait
+          rm build/Hex-notarize.zip
+
+      - name: Staple notarization ticket
+        run: xcrun stapler staple build/export/Hex.app
+
+      - name: Create DMG
+        run: |
+          hdiutil create \
+            -volname "Hex" \
+            -srcfolder build/export/Hex.app \
+            -ov \
+            -format UDZO \
+            "build/${{ steps.version.outputs.dmg_name }}"
+
+      - name: Notarize DMG
+        run: |
+          xcrun notarytool submit "build/${{ steps.version.outputs.dmg_name }}" \
+            --keychain-profile "notarytool" \
+            --keychain /Users/felix/Library/Keychains/login.keychain-db \
+            --wait
+
+      - name: Staple DMG
+        run: xcrun stapler staple "build/${{ steps.version.outputs.dmg_name }}"
+
+      - name: Compute sha256
+        id: package
+        run: |
+          SHA256="$(shasum -a 256 "build/${{ steps.version.outputs.dmg_name }}" | awk '{print $1}')"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            "build/${{ steps.version.outputs.dmg_name }}" \
+            --generate-notes \
+            --title "Hex ${{ steps.version.outputs.version }}"
+
+      - name: Update Homebrew tap
+        env:
+          REPO_ACCESS_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SHA256="${{ steps.package.outputs.sha256 }}"
+          git clone "https://x-access-token:${REPO_ACCESS_TOKEN}@github.com/FelixLisczyk-Org/homebrew-tap.git" /tmp/homebrew-tap
+          cd /tmp/homebrew-tap
+          sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/hex.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"${SHA256}\"/" Casks/hex.rb
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git add Casks/hex.rb
+          git commit -m "chore: update hex to ${VERSION}"
+          git push
+          rm -rf /tmp/homebrew-tap
+
+      - name: Cleanup build artifacts
+        if: always()
+        run: rm -rf build/
