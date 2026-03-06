@@ -33,7 +33,7 @@ jobs:
             -scheme Hex \
             -configuration Release \
             -archivePath build/Hex.xcarchive \
-            -destination "generic/platform=macOS,variant=Mac" \
+            -destination "generic/platform=macOS" \
             MARKETING_VERSION="${{ steps.version.outputs.version }}" \
             CURRENT_PROJECT_VERSION="${{ steps.version.outputs.build_number }}"
 
