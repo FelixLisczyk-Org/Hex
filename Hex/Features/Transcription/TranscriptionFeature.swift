@@ -62,6 +62,7 @@ struct TranscriptionFeature {
     case transcription
   }
 
+  @Dependency(\.foundationModels) var foundationModels
   @Dependency(\.transcription) var transcription
   @Dependency(\.recording) var recording
   @Dependency(\.pasteboard) var pasteboard
@@ -446,11 +447,19 @@ private extension TranscriptionFeature {
     let sourceAppBundleID = state.sourceAppBundleID
     let sourceAppName = state.sourceAppName
     let transcriptionHistory = state.$transcriptionHistory
+    let aiCleanupEnabled = state.hexSettings.aiTextCleanupEnabled
+    let isRemappingScratchpadFocused = state.isRemappingScratchpadFocused
 
     return .run { send in
+      var finalText = modifiedResult
+      if aiCleanupEnabled && !isRemappingScratchpadFocused {
+        if foundationModels.checkAvailability() == .available {
+          finalText = await foundationModels.cleanup(modifiedResult)
+        }
+      }
       do {
         try await finalizeRecordingAndStoreTranscript(
-          result: modifiedResult,
+          result: finalText,
           duration: duration,
           sourceAppBundleID: sourceAppBundleID,
           sourceAppName: sourceAppName,

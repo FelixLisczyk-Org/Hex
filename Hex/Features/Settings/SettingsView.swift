@@ -29,6 +29,8 @@ struct SettingsView: View {
 				LanguageSectionView(store: store)
 			}
 
+			TranscriptionSectionView(store: store)
+
 			HotKeySectionView(store: store)
           
 			if microphonePermission == .granted && !store.availableInputDevices.isEmpty {

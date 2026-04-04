@@ -32,6 +32,7 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		return modifiers + key
 	}
 
+	public var aiTextCleanupEnabled: Bool
 	public var soundEffectsEnabled: Bool
 	public var soundEffectsVolume: Double
 	public var hotkey: HotKey
@@ -56,6 +57,7 @@ public struct HexSettings: Codable, Equatable, Sendable {
 	public var wordRemappings: [WordRemapping]
 
 	public init(
+		aiTextCleanupEnabled: Bool = false,
 		soundEffectsEnabled: Bool = true,
 		soundEffectsVolume: Double = HexSettings.baseSoundEffectsVolume,
 		hotkey: HotKey = .init(key: nil, modifiers: [.option]),
@@ -79,6 +81,7 @@ public struct HexSettings: Codable, Equatable, Sendable {
 		wordRemovals: [WordRemoval] = HexSettings.defaultWordRemovals,
 		wordRemappings: [WordRemapping] = []
 	) {
+		self.aiTextCleanupEnabled = aiTextCleanupEnabled
 		self.soundEffectsEnabled = soundEffectsEnabled
 		self.soundEffectsVolume = soundEffectsVolume
 		self.hotkey = hotkey
@@ -122,6 +125,7 @@ public struct HexSettings: Codable, Equatable, Sendable {
 // MARK: - Schema
 
 private enum HexSettingKey: String, CodingKey, CaseIterable {
+	case aiTextCleanupEnabled
 	case soundEffectsEnabled
 	case soundEffectsVolume
 	case hotkey
@@ -206,6 +210,7 @@ private enum HexSettingsSchema {
 	static let defaults = HexSettings()
 
 	nonisolated(unsafe) static let fields: [AnySettingsField] = [
+		SettingsField(.aiTextCleanupEnabled, keyPath: \.aiTextCleanupEnabled, default: defaults.aiTextCleanupEnabled).eraseToAny(),
 		SettingsField(.soundEffectsEnabled, keyPath: \.soundEffectsEnabled, default: defaults.soundEffectsEnabled).eraseToAny(),
 		SettingsField(.soundEffectsVolume, keyPath: \.soundEffectsVolume, default: defaults.soundEffectsVolume).eraseToAny(),
 		SettingsField(.hotkey, keyPath: \.hotkey, default: defaults.hotkey).eraseToAny(),
